@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.junit.jupiter.api.Test;
+import org.restfeeds.client.TestUtils.DummyFeedReaderRestClient;
 
 class FeedReaderTests {
 
@@ -55,7 +56,7 @@ class FeedReaderTests {
   @Test
   void shouldNotRead() throws Exception {
     AtomicInteger count = new AtomicInteger(0);
-    FeedReader feedReader = new MyExtendedFeedReader(
+    FeedReader feedReader = new FeedReader(
         "http://localhost/events",
         feedItem -> count.incrementAndGet(),
         new DummyFeedReaderRestClient(),
@@ -80,7 +81,7 @@ class FeedReaderTests {
     AtomicInteger onAfterReadCount = new AtomicInteger(0);
     AtomicInteger onBeforeStopCount = new AtomicInteger(0);
     AtomicInteger onAfterStopCount = new AtomicInteger(0);
-    FeedReader feedReader = new MyExtendedFeedReader(
+    FeedReader feedReader = new FeedReader(
         "http://localhost/events",
         feedItem -> count.incrementAndGet(),
         new DummyFeedReaderRestClient(),
@@ -147,30 +148,24 @@ class FeedReaderTests {
 
   }
 
+  @Test
+  void shouldNotAcceptMoreThanOnce() throws Exception {
+    AtomicInteger count = new AtomicInteger(0);
+    FeedReader feedReader = new FeedReader(
+        "http://localhost/events",
+        feedItem -> count.incrementAndGet(),
+        new DummyFeedReaderRestClient(),
+        new InMemoryNextLinkRepository()) {
 
-  private static class DummyFeedReaderRestClient implements FeedReaderRestClient {
-
-    @Override
-    public List<FeedItem> getFeedItems(String feedUrl) {
-      try {
-        Thread.sleep(100L);
-      } catch (InterruptedException ignored) {
+      @Override
+      protected boolean shouldAccept(String link, List<FeedItem> feedItem) {
+        return count.get() < 1;
       }
-      List<FeedItem> feedItems = new java.util.ArrayList<>();
-      FeedItem feedItem = new FeedItem();
-      feedItem.setNext("/events?offset=100");
-      feedItems.add(feedItem);
-      return feedItems;
-    }
-  }
 
-  private abstract static class MyExtendedFeedReader extends FeedReader {
+    };
 
-    public MyExtendedFeedReader(String feedBaseUrl, FeedItemConsumer consumer,
-        FeedReaderRestClient feedReaderRestClient,
-        NextLinkRepository nextLinkRepository) {
-      super(feedBaseUrl, consumer, feedReaderRestClient, nextLinkRepository);
-    }
-
+    new Thread(feedReader::read).start();
+    Thread.sleep(300L);
+    assertEquals(1, count.get());
   }
 }
